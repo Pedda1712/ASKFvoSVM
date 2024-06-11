@@ -1,0 +1,8 @@
+/**/*.cfg
+lib/
+lib64/
+lib64
+lib
+bin/
+share/
+/**/__pycache__
