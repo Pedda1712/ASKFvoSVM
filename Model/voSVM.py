@@ -76,7 +76,7 @@ class ASKFvoSVM:
         # K : data similarity matrix
         # labels : classification
         # max_iter: maximum inner iterations on solver
-        def __init__(self, Ks, labels, max_iter = 1000):
+        def __init__(self, Ks, labels, max_iter = 1000, on_gpu=False):
                 self.noLabels = np.max(labels)+1
                 self.labels = labels
 
@@ -105,8 +105,41 @@ class ASKFvoSVM:
                 self.delta = 1
                 self.C = 1
                 self.Ky = self.Y.T @ self.Y
-                self.result, self.a , self.new_eigenvalues = solve(Kold=K_old, gamma=self.gamma, delta=self.delta, c=self.C, Y=self.Y, Ky = self.Ky,
-                                                                   eigenvaluesOld=self.old_eigenvalues, eigenvectors=self.eigenvectors, np=np, max_iter=max_iter)
+
+                if not on_gpu:
+                    self.result, self.a , self.new_eigenvalues = solve(
+                        Kold=K_old,
+                        gamma=self.gamma,
+                        delta=self.delta,
+                        c=self.C,
+                        Y=self.Y,
+                        Ky = self.Ky,
+                        eigenvaluesOld=self.old_eigenvalues,
+                        eigenvectors=self.eigenvectors,
+                        np=np,
+                        max_iter=max_iter)
+                else:
+                    # move data to gpu and solve there
+                    import cupy as cp
+                    cKold = cp.asarray(K_old)
+                    cY = cp.asarray(self.Y)
+                    cKy = cp.asarray(self.Ky)
+                    ceigenvaluesOld = cp.asarray(self.old_eigenvalues)
+                    ceigenvectors = cp.asarray(self.eigenvectors)
+                    cresult, ca, cnew_eigenvalues = solve(
+                        Kold=cKold,
+                        gamma=self.gamma,
+                        delta=self.delta,
+                        c=self.C,
+                        Y=cY,
+                        Ky=cKy,
+                        eigenvaluesOld=ceigenvaluesOld,
+                        eigenvectors=ceigenvectors,
+                        np=cp,
+                        max_iter=max_iter)
+                    self.result = cp.asnumpy(cresult)
+                    self.a = cp.asnumpy(ca)
+                    self.new_eigenvalues = cp.asnumpy(cnew_eigenvalues)
 
                 self.K_new = self.eigenvectors @ np.diag(self.new_eigenvalues) @ self.eigenvectors.T
                 
