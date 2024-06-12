@@ -12,7 +12,7 @@ def rbf_kernel(X1, X2, gamma=1):
 
 # Example Data:
 use_kernel = rbf_kernel
-n_classes = 3
+n_classes = 5
 n_dimensions = 2
 n_samples = 200
 X, labels = make_blobs(n_samples=n_samples,
@@ -29,7 +29,7 @@ K2 = rbf_kernel(X, X, 0.1)
 K3 = rbf_kernel(X, X, 1)
 K4 = rbf_kernel(X, X, 10)
 K5 = rbf_kernel(X, X, 100)
-model = ASKFvoSVM([K1, K2, K3, K4, K5], labels)
+model = ASKFvoSVM([K1, K2, K3, K4, K5], labels, max_iter=200)
 #model = ASKFvoSVM([K3, K2, K4, K1], labels)
 
 svs = model.getSVIndices()

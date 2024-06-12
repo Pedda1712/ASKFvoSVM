@@ -73,10 +73,10 @@ def mkVecLabel(cl, len):
         return vec
 
 class ASKFvoSVM:
-        # X : data
         # K : data similarity matrix
         # labels : classification
-        def __init__(self, Ks, labels):
+        # max_iter: maximum inner iterations on solver
+        def __init__(self, Ks, labels, max_iter = 1000):
                 self.noLabels = np.max(labels)+1
                 self.labels = labels
 
@@ -102,10 +102,11 @@ class ASKFvoSVM:
                 print("start solving")
                 self.beta = 1
                 self.gamma = 1
-                self.delta = 100
-                self.C = 9
-                self.result, self.a , self.new_eigenvalues = solve(Kold=K_old, gamma=self.gamma, delta=self.delta, c=self.C, Y=self.Y,
-                                 eigenvaluesOld=self.old_eigenvalues, eigenvectors=self.eigenvectors, np=np)
+                self.delta = 1
+                self.C = 1
+                self.Ky = self.Y.T @ self.Y
+                self.result, self.a , self.new_eigenvalues = solve(Kold=K_old, gamma=self.gamma, delta=self.delta, c=self.C, Y=self.Y, Ky = self.Ky,
+                                                                   eigenvaluesOld=self.old_eigenvalues, eigenvectors=self.eigenvectors, np=np, max_iter=max_iter)
 
                 self.K_new = self.eigenvectors @ np.diag(self.new_eigenvalues) @ self.eigenvectors.T
                 

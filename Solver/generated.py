@@ -1,5 +1,5 @@
 """
-Sample code automatically generated on 2024-06-11 12:00:42
+Sample code automatically generated on 2024-06-12 08:13:55
 
 by geno from www.geno-project.org
 
@@ -11,13 +11,14 @@ parameters
   scalar c
   scalar gamma
   matrix Y
+  matrix Ky symmetric
   vector eigenvaluesOld
   matrix eigenvectors
 variables
   vector alphas
   vector eigenvalues
 min
-  0.5*alphas'*((eigenvectors*diag(eigenvalues)*eigenvectors').*(Y'*Y))*alphas-sum(alphas)+gamma*norm2(Kold-eigenvectors*diag(eigenvalues)*eigenvectors')
+  0.5*alphas'*((eigenvectors*diag(eigenvalues)*eigenvectors').*Ky)*alphas-sum(alphas)+gamma*norm2(Kold-eigenvectors*diag(eigenvalues)*eigenvectors')
 st
   alphas >= 0
   alphas <= c
@@ -49,13 +50,14 @@ except ImportError:
 
 
 class GenoNLP:
-    def __init__(self, Kold, delta, c, gamma, Y, eigenvaluesOld, eigenvectors, np):
+    def __init__(self, Kold, delta, c, gamma, Y, Ky, eigenvaluesOld, eigenvectors, np):
         self.np = np
         self.Kold = Kold
         self.delta = delta
         self.c = c
         self.gamma = gamma
         self.Y = Y
+        self.Ky = Ky
         self.eigenvaluesOld = eigenvaluesOld
         self.eigenvectors = eigenvectors
         assert isinstance(Kold, self.np.ndarray)
@@ -86,6 +88,11 @@ class GenoNLP:
         assert len(dim) == 2
         self.Y_rows = dim[0]
         self.Y_cols = dim[1]
+        assert isinstance(Ky, self.np.ndarray)
+        dim = Ky.shape
+        assert len(dim) == 2
+        self.Ky_rows = dim[0]
+        self.Ky_cols = dim[1]
         assert isinstance(eigenvaluesOld, self.np.ndarray)
         dim = eigenvaluesOld.shape
         assert len(dim) == 1
@@ -96,15 +103,15 @@ class GenoNLP:
         assert len(dim) == 2
         self.eigenvectors_rows = dim[0]
         self.eigenvectors_cols = dim[1]
-        self.alphas_rows = self.Kold_cols
+        self.alphas_rows = self.Kold_rows
         self.alphas_cols = 1
         self.alphas_size = self.alphas_rows * self.alphas_cols
         self.eigenvalues_rows = self.eigenvectors_cols
         self.eigenvalues_cols = 1
         self.eigenvalues_size = self.eigenvalues_rows * self.eigenvalues_cols
         # the following dim assertions need to hold for this problem
-        assert self.alphas_rows == self.Kold_cols == self.eigenvectors_rows == self.Y_cols == self.Kold_rows
-        assert self.eigenvalues_rows == self.eigenvectors_cols
+        assert self.Kold_rows == self.Ky_rows == self.eigenvectors_rows == self.Ky_cols == self.alphas_rows == self.Kold_cols
+        assert self.eigenvectors_cols == self.eigenvalues_rows
 
     def getLowerBounds(self):
         bounds = []
@@ -131,13 +138,12 @@ class GenoNLP:
     def fAndG(self, _x):
         alphas, eigenvalues = self.variables(_x)
         T_0 = (self.eigenvectors).dot((eigenvalues[:, self.np.newaxis] * self.eigenvectors.T))
-        T_1 = (self.Y.T).dot(self.Y)
-        t_2 = ((T_0 * T_1)).dot(alphas)
-        T_3 = ((self.eigenvectors * eigenvalues[self.np.newaxis, :])).dot(self.eigenvectors.T)
-        T_4 = (self.Kold - T_0)
-        f_ = (((0.5 * (alphas).dot(t_2)) - self.np.sum(alphas)) + (self.gamma * self.np.linalg.norm(T_4, 'fro')))
-        g_0 = (((0.5 * t_2) - self.np.ones(self.eigenvalues_rows)) + (0.5 * ((T_3 * T_1)).dot(alphas)))
-        g_1 = ((0.5 * self.np.diag((((self.eigenvectors.T).dot((alphas[:, self.np.newaxis] * T_1)) * alphas[self.np.newaxis, :])).dot(self.eigenvectors))) - ((self.gamma / self.np.linalg.norm((self.Kold.T - T_3), 'fro')) * self.np.diag(((self.eigenvectors.T).dot(T_4)).dot(self.eigenvectors))))
+        t_1 = ((T_0 * self.Ky)).dot(alphas)
+        T_2 = ((self.eigenvectors * eigenvalues[self.np.newaxis, :])).dot(self.eigenvectors.T)
+        T_3 = (self.Kold - T_0)
+        f_ = (((0.5 * (alphas).dot(t_1)) - self.np.sum(alphas)) + (self.gamma * self.np.linalg.norm(T_3, 'fro')))
+        g_0 = (((0.5 * t_1) - self.np.ones(self.eigenvectors_cols)) + (0.5 * ((T_2 * self.Ky.T)).dot(alphas)))
+        g_1 = ((0.5 * self.np.diag((((self.eigenvectors.T).dot((alphas[:, self.np.newaxis] * self.Ky)) * alphas[self.np.newaxis, :])).dot(self.eigenvectors))) - ((self.gamma / self.np.linalg.norm((self.Kold.T - T_2), 'fro')) * self.np.diag(((self.eigenvectors.T).dot(T_3)).dot(self.eigenvectors))))
         g_ = self.np.hstack((g_0, g_1))
         return f_, g_
 
@@ -198,16 +204,16 @@ class GenoNLP:
         gv_ = self.np.hstack((gv_0, gv_1))
         return gv_
 
-def solve(Kold, delta, c, gamma, Y, eigenvaluesOld, eigenvectors, np):
+def solve(Kold, delta, c, gamma, Y, Ky, eigenvaluesOld, eigenvectors, np, max_iter):
     start = timer()
-    NLP = GenoNLP(Kold, delta, c, gamma, Y, eigenvaluesOld, eigenvectors, np)
+    NLP = GenoNLP(Kold, delta, c, gamma, Y, Ky, eigenvaluesOld, eigenvectors, np)
     x0 = NLP.getStartingPoint()
     lb = NLP.getLowerBounds()
     ub = NLP.getUpperBounds()
     # These are the standard solver options, they can be omitted.
     options = {'eps_pg' : 1E-4,
                'constraint_tol' : 1E-4,
-               'max_iter' : 3000,
+               'max_iter' : max_iter,
                'm' : 10,
                'ls' : 0,
                'verbose' : 5  # Set it to 0 to fully mute it.
@@ -256,15 +262,17 @@ def generateRandomData(np):
     c = np.random.rand(1)[0]
     gamma = np.random.rand(1)[0]
     Y = np.random.randn(3, 3)
+    Ky = np.random.randn(3, 3)
+    Ky = 0.5 * (Ky + Ky.T)  # make it symmetric
     eigenvaluesOld = np.random.randn(3)
     eigenvectors = np.random.randn(3, 3)
-    return Kold, delta, c, gamma, Y, eigenvaluesOld, eigenvectors
+    return Kold, delta, c, gamma, Y, Ky, eigenvaluesOld, eigenvectors
 
 if __name__ == '__main__':
     import numpy as np
     # import cupy as np  # uncomment this for GPU usage
     print('\ngenerating random instance')
-    Kold, delta, c, gamma, Y, eigenvaluesOld, eigenvectors = generateRandomData(np=np)
+    Kold, delta, c, gamma, Y, Ky, eigenvaluesOld, eigenvectors = generateRandomData(np=np)
     print('solving ...')
-    result, alphas, eigenvalues = solve(Kold, delta, c, gamma, Y, eigenvaluesOld, eigenvectors, np=np)
+    result, alphas, eigenvalues = solve(Kold, delta, c, gamma, Y, Ky, eigenvaluesOld, eigenvectors, np=np)
 
